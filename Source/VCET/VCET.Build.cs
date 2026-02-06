@@ -22,7 +22,18 @@ public class VCET : ModuleRules
 
         PrivateDependencyModuleNames.AddRange(new string[]
         {
-            "Projects"
+            "Projects",
+            "MaterialShaderQualitySettings"
         });
+
+        // Editor-only dependencies for material expressions
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.AddRange(new string[]
+            {
+                "UnrealEd",
+                "MaterialEditor"
+            });
+        }
     }
 }
