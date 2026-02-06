@@ -110,7 +110,29 @@ Use for flat/non-spherical worlds with top-down projection.
 MIT License - See LICENSE file
 
 ## Contributing
-Contributions welcome! Please open issues or pull requests.
 
-## Contributing
-Contributions welcome! Please open issues or pull requests.
+We welcome community contributions! VCET is designed to be extensible and community-driven.
+
+**Ways to Contribute:**
+- ?? Report bugs via [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
+- ? Suggest features via [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
+- ?? Improve documentation
+- ?? Submit pull requests
+
+**Getting Started:**
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
+- Check [ARCHITECTURE.md](ARCHITECTURE.md) to understand the codebase
+- Look for issues labeled `good-first-issue`
+
+**Ideas for Contributions:**
+- Cylindrical texture baker
+- Cubemap texture baker
+- Additional metadata types
+- Performance optimizations
+- Example projects/tutorials
+
+## Resources
+
+- **Documentation**: See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Issues**: [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
+- **Voxel Plugin**: [voxelplugin.com](https://voxelplugin.com/)

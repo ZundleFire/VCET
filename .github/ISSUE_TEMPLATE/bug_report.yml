@@ -1,0 +1,94 @@
+name: Bug Report
+description: Report a bug or issue with VCET
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which VCET component is affected?
+      options:
+        - Spherical Texture Baker
+        - Planar Texture Baker
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: ue-version
+    attributes:
+      label: Unreal Engine Version
+      description: Which version of Unreal Engine are you using?
+      placeholder: "e.g., 5.7"
+    validations:
+      required: true
+
+  - type: input
+    id: voxel-version
+    attributes:
+      label: Voxel Plugin Version
+      description: Which version of the Voxel Plugin are you using?
+      placeholder: "e.g., 2.0p8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear description of what the bug is
+      placeholder: Describe the issue...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Add Spherical Texture Baker component
+        2. Set VolumeLayer to...
+        3. Call ForceRebake()
+        4. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and Screenshots
+      description: Please paste any relevant logs or add screenshots
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues for duplicates
+          required: true
+        - label: I am using the latest version of VCET
+          required: false
