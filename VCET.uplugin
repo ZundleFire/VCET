@@ -1,0 +1,30 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "1.0.0",
+    "FriendlyName": "VCET - Voxel Community Extra Tools",
+    "Description": "Community-made extra tools for the Voxel Plugin. Includes texture baking utilities for spherical (planetary) and planar (flat) worlds.",
+    "Category": "Voxel",
+    "CreatedBy": "Zundle",
+    "CreatedByURL": "https://github.com/ZundleFire",
+    "DocsURL": "https://github.com/ZundleFire/VCET",
+    "MarketplaceURL": "",
+    "SupportURL": "https://github.com/ZundleFire/VCET/issues",
+    "CanContainContent": false,
+    "IsBetaVersion": false,
+    "IsExperimentalVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "VCET",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ],
+    "Plugins": [
+        {
+            "Name": "Voxel",
+            "Enabled": true
+        }
+    ]
+}
