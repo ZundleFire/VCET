@@ -10,7 +10,7 @@
 #include "VoxelQueryBlueprintLibrary.h"
 #include "SphericalTextureBaker.generated.h"
 
-class UVoxelLinearColorMetadata;
+class UVoxelMetadata;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSphericalTextureBaked);
 
@@ -22,7 +22,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSphericalTextureBaked);
  * 
  * Features:
  * - Multiple layers at different radii (Cloud, Land)
- * - RGBA output via Linear Color Metadata or grayscale
+ * - Auto-detects metadata type and writes appropriate channels:
+ *   - Float Metadata ? R channel (grayscale)
+ *   - Linear Color Metadata ? RGBA channels
+ *   - Normal Metadata ? RGB channels
  * - External or auto-created render targets
  */
 UCLASS(ClassGroup=(VCET), meta=(BlueprintSpawnableComponent), DisplayName="VCET Spherical Texture Baker")
@@ -54,8 +57,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cloud Layer")
     bool bEnableCloudLayer = true;
     
+    /** 
+     * Metadata to sample. Auto-detects type:
+     * - Float ? R channel only
+     * - Linear Color ? RGBA channels
+     * - Normal ? RGB channels
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cloud Layer", meta = (EditCondition = "bEnableCloudLayer"))
-    TObjectPtr<UVoxelLinearColorMetadata> CloudColorMetadata;
+    TObjectPtr<UVoxelMetadata> CloudMetadata;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cloud Layer", meta = (EditCondition = "bEnableCloudLayer"))
     TObjectPtr<UTextureRenderTarget2D> CloudRenderTarget;
@@ -80,8 +89,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Layer")
     bool bEnableLandLayer = false;
     
+    /** 
+     * Metadata to sample. Auto-detects type:
+     * - Float ? R channel only
+     * - Linear Color ? RGBA channels
+     * - Normal ? RGB channels
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Layer", meta = (EditCondition = "bEnableLandLayer"))
-    TObjectPtr<UVoxelLinearColorMetadata> LandColorMetadata;
+    TObjectPtr<UVoxelMetadata> LandMetadata;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Layer", meta = (EditCondition = "bEnableLandLayer"))
     TObjectPtr<UTextureRenderTarget2D> LandRenderTarget;
@@ -149,7 +164,7 @@ private:
     bool bIsBakingLand = false;
     
     void CreateRT(TObjectPtr<UTextureRenderTarget2D>& Out, UTextureRenderTarget2D* External, int32 W, int32 H);
-    void BakeLayer(bool bCloud, UVoxelLinearColorMetadata* Meta, UTextureRenderTarget2D* RT, float R, int32 W, int32 H);
+    void BakeLayer(bool bCloud, UVoxelMetadata* Meta, UTextureRenderTarget2D* RT, float R, int32 W, int32 H);
     void WriteGrayscale(UTextureRenderTarget2D* RT, const TArray<float>& V, int32 W, int32 H);
     void WriteColor(UTextureRenderTarget2D* RT, const TArray<FLinearColor>& C, int32 W, int32 H);
 };

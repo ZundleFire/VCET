@@ -10,7 +10,7 @@
 #include "VoxelQueryBlueprintLibrary.h"
 #include "PlanarTextureBaker.generated.h"
 
-class UVoxelLinearColorMetadata;
+class UVoxelMetadata;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlanarTextureBaked);
 
@@ -23,7 +23,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlanarTextureBaked);
  * Features:
  * - Multiple layers at different heights (Primary, Secondary)
  * - Configurable world bounds (XY area)
- * - RGBA output via Linear Color Metadata or grayscale
+ * - Auto-detects metadata type and writes appropriate channels:
+ *   - Float Metadata ? R channel (grayscale)
+ *   - Linear Color Metadata ? RGBA channels
+ *   - Normal Metadata ? RGB channels
  * - External or auto-created render targets
  */
 UCLASS(ClassGroup=(VCET), meta=(BlueprintSpawnableComponent), DisplayName="VCET Planar Texture Baker")
@@ -59,8 +62,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Layer")
     bool bEnablePrimaryLayer = true;
     
+    /** 
+     * Metadata to sample. Auto-detects type:
+     * - Float ? R channel only
+     * - Linear Color ? RGBA channels
+     * - Normal ? RGB channels
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Layer", meta = (EditCondition = "bEnablePrimaryLayer"))
-    TObjectPtr<UVoxelLinearColorMetadata> PrimaryColorMetadata;
+    TObjectPtr<UVoxelMetadata> PrimaryMetadata;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Layer", meta = (EditCondition = "bEnablePrimaryLayer"))
     TObjectPtr<UTextureRenderTarget2D> PrimaryRenderTarget;
@@ -85,8 +94,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Secondary Layer")
     bool bEnableSecondaryLayer = false;
     
+    /** 
+     * Metadata to sample. Auto-detects type:
+     * - Float ? R channel only
+     * - Linear Color ? RGBA channels
+     * - Normal ? RGB channels
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Secondary Layer", meta = (EditCondition = "bEnableSecondaryLayer"))
-    TObjectPtr<UVoxelLinearColorMetadata> SecondaryColorMetadata;
+    TObjectPtr<UVoxelMetadata> SecondaryMetadata;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Secondary Layer", meta = (EditCondition = "bEnableSecondaryLayer"))
     TObjectPtr<UTextureRenderTarget2D> SecondaryRenderTarget;
@@ -154,7 +169,7 @@ private:
     bool bIsBakingSecondary = false;
     
     void CreateRT(TObjectPtr<UTextureRenderTarget2D>& Out, UTextureRenderTarget2D* External, int32 W, int32 H);
-    void BakeLayer(bool bPrimary, UVoxelLinearColorMetadata* Meta, UTextureRenderTarget2D* RT, float Z, int32 W, int32 H);
+    void BakeLayer(bool bPrimary, UVoxelMetadata* Meta, UTextureRenderTarget2D* RT, float Z, int32 W, int32 H);
     void WriteGrayscale(UTextureRenderTarget2D* RT, const TArray<float>& V, int32 W, int32 H);
     void WriteColor(UTextureRenderTarget2D* RT, const TArray<FLinearColor>& C, int32 W, int32 H);
 };
