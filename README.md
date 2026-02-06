@@ -73,8 +73,10 @@ Use for planetary/spherical worlds with equirectangular projection.
 1. Add the **VCET Spherical Texture Baker** component to an actor
 2. Configure `VolumeLayer` to your Voxel volume layer
 3. Set `SphereCenter` and layer radii (CloudRadius, LandRadius)
-4. Optionally assign `ColorMetadata` for RGBA output (or leave null for grayscale)
+4. Assign `ColorMetadata` to your Linear Color Metadata asset for RGBA output
 5. Call `ForceRebake()` to bake, or enable `bBakeOnBeginPlay`
+
+> **Note:** The `ColorMetadata` field expects a `UVoxelLinearColorMetadata` asset. This is required to get meaningful RGBA data from your volume layer. If left null, the baker will sample the raw distance field and output grayscale - this only works for simple noise volume layers.
 
 **Blueprint Functions:**
 - `ForceRebake()` - Bake all enabled layers
@@ -88,8 +90,10 @@ Use for flat/non-spherical worlds with top-down projection.
 1. Add the **VCET Planar Texture Baker** component to an actor
 2. Configure `VolumeLayer` to your Voxel volume layer
 3. Set `WorldCenter`, `WorldSize`, and layer heights (PrimaryHeight, SecondaryHeight)
-4. Optionally assign `ColorMetadata` for RGBA output (or leave null for grayscale)
+4. Assign `ColorMetadata` to your Linear Color Metadata asset for RGBA output
 5. Call `ForceRebake()` to bake, or enable `bBakeOnBeginPlay`
+
+> **Note:** The `ColorMetadata` field expects a `UVoxelLinearColorMetadata` asset. This is required to get meaningful RGBA data from your volume layer. If left null, the baker will sample the raw distance field and output grayscale - this only works for simple noise volume layers.
 
 **Blueprint Functions:**
 - `ForceRebake()` - Bake all enabled layers
