@@ -16,14 +16,6 @@ Bakes Voxel volume layer data to flat render targets for **non-spherical/flat wo
 - Auto-detects metadata type (Float, LinearColor, Normal)
 - Multiple layers (Primary, Secondary)
 
-### Cloud Animation System
-Realistic animated cloud movement for spherical planets.
-- **Latitude-based wind patterns**: Trade winds, westerlies, polar easterlies
-- **Flowmap distortion**: Local swirling for storms and cyclones
-- **Curl noise turbulence**: Small-scale detail movement
-- **Coriolis rotation**: Proper cyclone rotation per hemisphere
-- **Material Parameter Collection integration**: Easy material setup
-
 ## Requirements
 - Unreal Engine 5.7+
 - [Voxel Plugin 2.0p8+](https://voxelplugin.com/)
@@ -114,48 +106,11 @@ Use for flat/non-spherical worlds with top-down projection.
 - `ForceRebakeSecondary()` - Bake secondary layer only
 - `RequestGlobalRebake()` - Trigger all bakers in the world
 
-### Cloud Animation Component
-For animated cloud movement on spherical planets.
-
-**Setup:**
-1. Create a **Material Parameter Collection** with these scalar parameters:
-   - `CloudTime`, `EquatorWindSpeed`, `PolarWindSpeed`, `WindReversalLatitude`
-   - `TurbulenceStrength`, `TurbulenceScale`, `TurbulenceSpeed`
-   - `FlowPhase1`, `FlowPhase2`, `FlowBlendFactor`
-2. Add the **VCET Cloud Animation** component to your sky sphere or game mode
-3. Assign your MPC to `CloudMPC`
-4. Configure `AnimParams` for your planet's wind patterns
-
-**In Your Cloud Material:**
-Use the HLSL functions from `Shaders/SphericalCloudAnimation.ush` in a Custom node:
-
-```hlsl
-// Get animated UV
-float2 AnimatedUV = VCET_AnimateCloudUV(
-    UV,
-    CloudTime,           // From MPC
-    EquatorWindSpeed,    // From MPC
-    PolarWindSpeed,      // From MPC
-    0.15,                // Wind reversal latitude
-    TurbulenceStrength,  // From MPC
-    TurbulenceScale      // From MPC
-);
-
-// Sample cloud texture
-return CloudTexture.Sample(CloudSampler, AnimatedUV);
-```
-
-**Animation Parameters:**
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `EquatorWindSpeed` | UV/s at equator | 0.02 |
-| `PolarWindSpeed` | UV/s at poles | 0.005 |
-| `WindReversalLatitude` | Where westerlies start | 0.3 |
-| `TurbulenceStrength` | Curl noise intensity | 0.03 |
-| `TurbulenceScale` | Curl noise frequency | 2.0 |
-
 ## License
 MIT License - See LICENSE file
+
+## Contributing
+Contributions welcome! Please open issues or pull requests.
 
 ## Contributing
 Contributions welcome! Please open issues or pull requests.
