@@ -36,15 +36,7 @@ Feature requests are welcome! Please:
 - Documentation improvements
 - Bug fixes
 - Performance optimizations
-- New metadata type support
-- Additional texture baker features
-
-**Ideas for New Features:**
-- Cylindrical texture baker
-- Cubemap texture baker
-- Animated texture baking
-- Distance field bakers
-- Mesh bakers from voxel data
+- New features and/or helpers
 
 #### Development Setup
 
@@ -72,7 +64,6 @@ Feature requests are welcome! Please:
 - Follow Unreal Engine coding standards
 - Use descriptive variable names
 - Add comments for complex logic
-- Keep functions focused and single-purpose
 
 **Naming Conventions:**
 ```cpp
@@ -106,16 +97,17 @@ VCET/
 ### Module Organization
 
 **When to add to the existing VCET module:**
-- ? New baker types (Cylindrical, Cubemap, etc.)
-- ? New metadata type support
-- ? Small utility classes
-- ? Performance improvements
-- ? Bug fixes
+- New baker types (Cylindrical, Cubemap, etc.)
+- New metadata type support
+- Small utility classes
+- Performance improvements
+- Bug fixes
 
 **When to create a new module:**
-- ?? Feature requires unique dependencies not in VCET.Build.cs
-- ?? Experimental features users may want to disable
-- ?? Large subsystems (e.g., material function library, editor tools)
+- Feature requires unique dependencies not in VCET.Build.cs
+- Experimental features users may want to disable
+- Large subsystems (e.g., material function library, editor tools)
+- Your own additions and features
 
 **Creating a New Module:**
 ```
@@ -150,6 +142,7 @@ Start with the main VCET module. Only create a new module if:
 1. Your feature has dependencies that would bloat VCET for all users
 2. The maintainers suggest it during code review
 3. You're adding editor-only tools (use `"Type": "Editor"`)
+4. You're adding features and system that differ from the core module
 
 This keeps the plugin simple for most contributors while allowing growth.
 
@@ -257,7 +250,7 @@ git commit -m "Update"
    - Clear title describing the change
    - Description of what changed and why
    - Reference to any related issues
-   - Screenshots/videos for visual changes
+   - (optional) Screenshots/videos for visual changes
 
 **PR Template:**
 ```markdown
