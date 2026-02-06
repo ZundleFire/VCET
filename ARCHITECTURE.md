@@ -150,6 +150,57 @@ void CreateRT(TObjectPtr<UTextureRenderTarget2D>& Out,
 
 ## Extension Points
 
+### Module Organization Strategy
+
+**Current Structure:**
+VCET uses a **single-module architecture** for simplicity:
+```
+VCET/Source/VCET/  (Runtime module)
+```
+
+**When to keep features in the main VCET module:**
+- ? New baker types (they share common patterns)
+- ? New metadata support (minimal code)
+- ? Utilities that complement existing features
+- ? Performance optimizations
+- ? Bug fixes
+
+**When to create a separate module:**
+
+| Feature Type | Example | Module Strategy |
+|--------------|---------|-----------------|
+| **Core Bakers** | Cylindrical, Cubemap | Main VCET module |
+| **Material Tools** | Material function library, shader nodes | `VCETMaterials` module |
+| **Editor Tools** | Custom editors, visualizers | `VCETEditor` module (Editor type) |
+| **Advanced Features** | Flowmap generation, animation baking | `VCETAdvanced` module |
+| **Experimental** | Research features, beta systems | `VCETExperimental` module |
+
+**Multi-Module Example:**
+```
+VCET/
+??? Source/
+?   ??? VCET/              # Core: Texture bakers (always loaded)
+?   ??? VCETMaterials/     # Material functions and shaders
+?   ??? VCETEditor/        # Editor-only tools
+?   ??? VCETAdvanced/      # Advanced features with extra deps
+??? VCET.uplugin           # Declares all modules
+```
+
+**Benefits of Single Module (Current):**
+- ? Simpler for contributors
+- ? Faster compile times (one module to build)
+- ? Easier dependency management
+- ? Less configuration
+
+**When Multi-Module Makes Sense:**
+- New feature adds 5+ MB of dependencies
+- Feature is editor-only (no runtime cost)
+- Feature is experimental and users may want to disable it
+- Different loading phases needed (e.g., PostConfigInit vs Default)
+
+**Recommendation:**
+Keep new bakers and core features in the main VCET module. Only split into modules if suggested during code review or if your feature truly needs isolation.
+
 ### Adding a New Baker Type
 
 To add a new baker (e.g., Cylindrical, Cubemap):

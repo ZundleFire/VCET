@@ -103,6 +103,56 @@ VCET/
 ??? README.md
 ```
 
+### Module Organization
+
+**When to add to the existing VCET module:**
+- ? New baker types (Cylindrical, Cubemap, etc.)
+- ? New metadata type support
+- ? Small utility classes
+- ? Performance improvements
+- ? Bug fixes
+
+**When to create a new module:**
+- ?? Feature requires unique dependencies not in VCET.Build.cs
+- ?? Experimental features users may want to disable
+- ?? Large subsystems (e.g., material function library, editor tools)
+
+**Creating a New Module:**
+```
+VCET/
+??? Source/
+?   ??? VCET/              # Core module (always loaded)
+?   ?   ??? VCET.Build.cs
+?   ??? VCETAdvanced/      # Optional module
+?       ??? VCETAdvanced.Build.cs
+?       ??? Public/
+?       ??? Private/
+```
+
+Update `VCET.uplugin`:
+```json
+"Modules": [
+    {
+        "Name": "VCET",
+        "Type": "Runtime",
+        "LoadingPhase": "Default"
+    },
+    {
+        "Name": "VCETAdvanced",
+        "Type": "Runtime",
+        "LoadingPhase": "Default"
+    }
+]
+```
+
+**Recommendation for Contributors:**
+Start with the main VCET module. Only create a new module if:
+1. Your feature has dependencies that would bloat VCET for all users
+2. The maintainers suggest it during code review
+3. You're adding editor-only tools (use `"Type": "Editor"`)
+
+This keeps the plugin simple for most contributors while allowing growth.
+
 #### Adding a New Baker
 
 Template for creating a new texture baker:
