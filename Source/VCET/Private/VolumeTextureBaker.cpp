@@ -14,9 +14,6 @@
 #include "VoxelLinearColorMetadata.h"
 #include "EngineUtils.h"
 
-// Metadata type enum for async task
-enum class EVolumeMetadataType : uint8 { None, Float, LinearColor };
-
 UVolumeTextureBaker::UVolumeTextureBaker()
 {
     PrimaryComponentTick.bCanEverTick = false;
@@ -51,6 +48,23 @@ void UVolumeTextureBaker::RequestGlobalRebake(UObject* WorldContextObject)
     }
 }
 
+EPixelFormat UVolumeTextureBaker::GetPixelFormat() const
+{
+    switch (TextureFormat)
+    {
+        case EVolumeTextureFormat::Grayscale8:
+            return PF_G8;
+        case EVolumeTextureFormat::Grayscale16F:
+            return PF_R16F;
+        case EVolumeTextureFormat::Color8:
+            return PF_B8G8R8A8;
+        case EVolumeTextureFormat::Color16F:
+            return PF_FloatRGBA;
+        default:
+            return PF_G8;
+    }
+}
+
 void UVolumeTextureBaker::ForceRebake()
 {
     if (bIsBaking) return;
@@ -67,14 +81,17 @@ void UVolumeTextureBaker::CreateVolumeRT()
         return;
     }
     
-    // Create new volume RT if needed
+    const EPixelFormat PixelFormat = GetPixelFormat();
+    const int32 Size = VolumeResolution;
+    
+    // Create new volume RT if needed or if size/format changed
     if (!VolumeTexture || 
-        VolumeTexture->SizeX != VolumeResolutionX || 
-        VolumeTexture->SizeY != VolumeResolutionY)
+        VolumeTexture->SizeX != Size || 
+        VolumeTexture->SizeY != Size ||
+        VolumeTexture->GetFormat() != PixelFormat)
     {
         VolumeTexture = NewObject<UTextureRenderTargetVolume>(this);
-        VolumeTexture->Init(VolumeResolutionX, VolumeResolutionY, VolumeResolutionZ, 
-                           bUseHDR ? PF_FloatRGBA : PF_B8G8R8A8);
+        VolumeTexture->Init(Size, Size, Size, PixelFormat);
         VolumeTexture->UpdateResourceImmediate(true);
     }
 }
@@ -88,27 +105,19 @@ void UVolumeTextureBaker::BakeVolume()
     
     bIsBaking = true;
     
-    const int32 SizeX = VolumeResolutionX;
-    const int32 SizeY = VolumeResolutionY;
-    const int32 SizeZ = VolumeResolutionZ;
-    const int32 TotalVoxels = SizeX * SizeY * SizeZ;
+    const int32 Size = VolumeResolution;
+    const int32 TotalVoxels = Size * Size * Size;
     
-    // Detect metadata type
-    EVolumeMetadataType MetaType = EVolumeMetadataType::None;
+    // Check for float metadata
+    bool bHasFloatMetadata = false;
     TOptional<FVoxelFloatMetadataRef> FloatRef;
-    TOptional<FVoxelLinearColorMetadataRef> ColorRef;
     
     if (Metadata)
     {
         if (auto* FloatMeta = Cast<UVoxelFloatMetadata>(Metadata))
         {
-            MetaType = EVolumeMetadataType::Float;
+            bHasFloatMetadata = true;
             FloatRef = FVoxelFloatMetadataRef(FloatMeta);
-        }
-        else if (auto* ColorMeta = Cast<UVoxelLinearColorMetadata>(Metadata))
-        {
-            MetaType = EVolumeMetadataType::LinearColor;
-            ColorRef = FVoxelLinearColorMetadataRef(ColorMeta);
         }
     }
     
@@ -125,12 +134,8 @@ void UVolumeTextureBaker::BakeVolume()
     // Capture parameters for async task
     TWeakObjectPtr<UVolumeTextureBaker> WeakThis(this);
     
-    const bool bSpherical = bUseSphericalRegion;
-    const FVector BoxCtr = BoxCenter;
-    const FVector BoxExt = BoxExtent;
-    const FVector SphCtr = SphereCenter;
-    const float RadiusInner = InnerRadius;
-    const float RadiusOuter = OuterRadius;
+    const FVector VolCtr = VolumeCenter;
+    const FVector VolSize = VolumeSize;
     const bool bRemap = bRemapNegativeToPositive;
     const bool bNorm = bAutoNormalize;
     const bool bInvert = bInvertResult;
@@ -138,59 +143,41 @@ void UVolumeTextureBaker::BakeVolume()
     
     struct FBakeResult
     {
-        TArray<FLinearColor> VoxelData;
+        TArray<float> DensityData;
     };
     
-    Voxel::AsyncTask([WeakLayer, Layers, STT, SizeX, SizeY, SizeZ, TotalVoxels,
-                     bSpherical, BoxCtr, BoxExt, SphCtr, RadiusInner, RadiusOuter,
-                     bRemap, bNorm, bInvert, Mult,
-                     MetaType, FloatRef, ColorRef]() -> TVoxelFuture<FBakeResult>
+    Voxel::AsyncTask([WeakLayer, Layers, STT, Size, TotalVoxels,
+                     VolCtr, VolSize, bRemap, bNorm, bInvert, Mult,
+                     bHasFloatMetadata, FloatRef]() -> TVoxelFuture<FBakeResult>
     {
         VOXEL_FUNCTION_COUNTER();
         FBakeResult Result;
-        Result.VoxelData.SetNum(TotalVoxels);
+        Result.DensityData.SetNum(TotalVoxels);
         
-        // Generate 3D sample positions
+        // Generate 3D sample positions for a cubic volume
         FVoxelDoubleVectorBuffer Positions;
         Positions.Allocate(TotalVoxels);
         
-        for (int32 Z = 0; Z < SizeZ; Z++)
+        const FVector HalfSize = VolSize * 0.5;
+        const FVector MinCorner = VolCtr - HalfSize;
+        
+        for (int32 Z = 0; Z < Size; Z++)
         {
-            for (int32 Y = 0; Y < SizeY; Y++)
+            for (int32 Y = 0; Y < Size; Y++)
             {
-                for (int32 X = 0; X < SizeX; X++)
+                for (int32 X = 0; X < Size; X++)
                 {
-                    const int32 Index = X + Y * SizeX + Z * SizeX * SizeY;
+                    const int32 Index = X + Y * Size + Z * Size * Size;
                     
                     // Normalized UVW coordinates (0-1)
-                    const double U = double(X) / double(SizeX - 1);
-                    const double V = double(Y) / double(SizeY - 1);
-                    const double W = double(Z) / double(SizeZ - 1);
+                    const double U = (double(X) + 0.5) / double(Size);
+                    const double V = (double(Y) + 0.5) / double(Size);
+                    const double W = (double(Z) + 0.5) / double(Size);
                     
-                    double WorldX, WorldY, WorldZ;
-                    
-                    if (bSpherical)
-                    {
-                        // Spherical shell: W = radius blend, UV = spherical coords
-                        const double Radius = FMath::Lerp(RadiusInner, RadiusOuter, W);
-                        const double Theta = U * 2.0 * PI; // Longitude (0 to 2PI)
-                        const double Phi = V * PI;          // Latitude (0 to PI)
-                        
-                        const double SinPhi = FMath::Sin(Phi);
-                        WorldX = SphCtr.X + Radius * SinPhi * FMath::Cos(Theta);
-                        WorldY = SphCtr.Y + Radius * SinPhi * FMath::Sin(Theta);
-                        WorldZ = SphCtr.Z + Radius * FMath::Cos(Phi);
-                    }
-                    else
-                    {
-                        // Box region: Simple linear interpolation
-                        const FVector MinCorner = BoxCtr - BoxExt * 0.5;
-                        const FVector MaxCorner = BoxCtr + BoxExt * 0.5;
-                        
-                        WorldX = FMath::Lerp(MinCorner.X, MaxCorner.X, U);
-                        WorldY = FMath::Lerp(MinCorner.Y, MaxCorner.Y, V);
-                        WorldZ = FMath::Lerp(MinCorner.Z, MaxCorner.Z, W);
-                    }
+                    // World position within the sampling volume
+                    const double WorldX = MinCorner.X + U * VolSize.X;
+                    const double WorldY = MinCorner.Y + V * VolSize.Y;
+                    const double WorldZ = MinCorner.Z + W * VolSize.Z;
                     
                     Positions.X.Set(Index, WorldX);
                     Positions.Y.Set(Index, WorldY);
@@ -202,8 +189,9 @@ void UVolumeTextureBaker::BakeVolume()
         // Query voxel data
         FVoxelQuery Query(0, *Layers, *STT, FVoxelDependencyCollector::Null);
         
-        if (MetaType == EVolumeMetadataType::Float && FloatRef.IsSet())
+        if (bHasFloatMetadata && FloatRef.IsSet())
         {
+            // Sample float metadata (density)
             TVoxelMap<FVoxelMetadataRef, TSharedRef<FVoxelBuffer>> MetaBuffers;
             const FVoxelMetadataRef& Ref = FloatRef.GetValue();
             if (Ref.IsValid())
@@ -220,35 +208,7 @@ void UVolumeTextureBaker::BakeVolume()
                     {
                         for (int32 i = 0; i < FMath::Min(FB->Num(), TotalVoxels); i++)
                         {
-                            float Val = (*FB)[i];
-                            if (bRemap) Val = (Val + 1.f) * 0.5f;
-                            Val *= Mult;
-                            if (bInvert) Val = 1.f - Val;
-                            Result.VoxelData[i] = FLinearColor(Val, Val, Val, 1.f);
-                        }
-                    }
-                }
-            }
-        }
-        else if (MetaType == EVolumeMetadataType::LinearColor && ColorRef.IsSet())
-        {
-            TVoxelMap<FVoxelMetadataRef, TSharedRef<FVoxelBuffer>> MetaBuffers;
-            const FVoxelMetadataRef& Ref = ColorRef.GetValue();
-            if (Ref.IsValid())
-            {
-                MetaBuffers.Add_EnsureNew(Ref, Ref.MakeDefaultBuffer(TotalVoxels));
-            }
-            Query.SampleVolumeLayer(WeakLayer, Positions, {}, MetaBuffers);
-            
-            if (Ref.IsValid())
-            {
-                if (auto* Buf = MetaBuffers.Find(Ref))
-                {
-                    if (auto* CB = static_cast<const FVoxelLinearColorBuffer*>(&Buf->Get()))
-                    {
-                        for (int32 i = 0; i < FMath::Min(CB->Num(), TotalVoxels); i++)
-                        {
-                            Result.VoxelData[i] = (*CB)[i];
+                            Result.DensityData[i] = (*FB)[i];
                         }
                     }
                 }
@@ -256,30 +216,44 @@ void UVolumeTextureBaker::BakeVolume()
         }
         else
         {
-            // No metadata - sample distance field
+            // Sample distance field directly
             auto Dist = Query.SampleVolumeLayer(WeakLayer, Positions);
-            float MinV = FLT_MAX, MaxV = -FLT_MAX;
-            
             for (int32 i = 0; i < TotalVoxels; i++)
             {
-                float Val = Dist[i];
-                if (bRemap) Val = (Val + 1.f) * 0.5f;
-                Val *= Mult;
-                if (bInvert) Val = 1.f - Val;
-                Result.VoxelData[i] = FLinearColor(Val, Val, Val, 1.f);
-                MinV = FMath::Min(MinV, Val);
-                MaxV = FMath::Max(MaxV, Val);
+                Result.DensityData[i] = Dist[i];
             }
-            
-            // Auto-normalize
-            if (bNorm && MaxV > MinV)
+        }
+        
+        // Process the data
+        float MinV = FLT_MAX, MaxV = -FLT_MAX;
+        
+        // First pass: remap and find min/max
+        for (int32 i = 0; i < TotalVoxels; i++)
+        {
+            float Val = Result.DensityData[i];
+            if (bRemap) Val = (Val + 1.f) * 0.5f;
+            Val *= Mult;
+            if (bInvert) Val = 1.f - Val;
+            Result.DensityData[i] = Val;
+            MinV = FMath::Min(MinV, Val);
+            MaxV = FMath::Max(MaxV, Val);
+        }
+        
+        // Second pass: normalize if requested
+        if (bNorm && MaxV > MinV)
+        {
+            const float Range = MaxV - MinV;
+            for (int32 i = 0; i < TotalVoxels; i++)
             {
-                const float Range = MaxV - MinV;
-                for (int32 i = 0; i < TotalVoxels; i++)
-                {
-                    float Val = (Result.VoxelData[i].R - MinV) / Range;
-                    Result.VoxelData[i] = FLinearColor(Val, Val, Val, 1.f);
-                }
+                Result.DensityData[i] = (Result.DensityData[i] - MinV) / Range;
+            }
+        }
+        else
+        {
+            // Just clamp to 0-1
+            for (int32 i = 0; i < TotalVoxels; i++)
+            {
+                Result.DensityData[i] = FMath::Clamp(Result.DensityData[i], 0.f, 1.f);
             }
         }
         
@@ -290,9 +264,9 @@ void UVolumeTextureBaker::BakeVolume()
         UVolumeTextureBaker* This = WeakThis.Get();
         if (!This) return;
         
-        if (Result.VoxelData.Num() > 0)
+        if (Result.DensityData.Num() > 0)
         {
-            This->WriteToVolumeRT(Result.VoxelData);
+            This->WriteToVolumeRT(Result.DensityData);
         }
         
         This->bIsBaking = false;
@@ -300,60 +274,89 @@ void UVolumeTextureBaker::BakeVolume()
     });
 }
 
-void UVolumeTextureBaker::WriteToVolumeRT(const TArray<FLinearColor>& VoxelData)
+void UVolumeTextureBaker::WriteToVolumeRT(const TArray<float>& DensityData)
 {
-    if (!VolumeTexture || VoxelData.Num() == 0) return;
+    if (!VolumeTexture || DensityData.Num() == 0) return;
     
-    const int32 SizeX = VolumeResolutionX;
-    const int32 SizeY = VolumeResolutionY;
-    const int32 SizeZ = VolumeResolutionZ;
+    const int32 Size = VolumeResolution;
+    const int32 TotalVoxels = Size * Size * Size;
     
-    // Get the texture's pixel format to determine bytes per pixel
-    const EPixelFormat PixelFormat = VolumeTexture->GetFormat();
+    if (DensityData.Num() != TotalVoxels)
+    {
+        UE_LOG(LogTemp, Error, TEXT("VolumeTextureBaker: Data size mismatch! Expected %d, got %d"), TotalVoxels, DensityData.Num());
+        return;
+    }
+    
+    const EPixelFormat PixelFormat = GetPixelFormat();
     const int32 BytesPerPixel = GPixelFormats[PixelFormat].BlockBytes;
     
-    // Convert to appropriate pixel format based on texture format
-    TSharedPtr<TArray<uint8>> DataPtr;
+    // Convert density data to the appropriate format
+    TSharedPtr<TArray<uint8>> DataPtr = MakeShared<TArray<uint8>>();
     
-    if (PixelFormat == PF_FloatRGBA || PixelFormat == PF_A32B32G32R32F)
+    if (PixelFormat == PF_G8)
     {
-        // HDR format - use FFloat16Color or full float
-        TArray<FFloat16Color> HdrData;
-        HdrData.SetNum(VoxelData.Num());
-        for (int32 i = 0; i < VoxelData.Num(); i++)
+        // Single channel 8-bit grayscale
+        DataPtr->SetNumUninitialized(TotalVoxels);
+        uint8* Dest = DataPtr->GetData();
+        for (int32 i = 0; i < TotalVoxels; i++)
         {
-            HdrData[i] = FFloat16Color(VoxelData[i]);
+            Dest[i] = static_cast<uint8>(FMath::Clamp(DensityData[i] * 255.f, 0.f, 255.f));
         }
-        
-        DataPtr = MakeShared<TArray<uint8>>();
-        DataPtr->SetNumUninitialized(HdrData.Num() * sizeof(FFloat16Color));
-        FMemory::Memcpy(DataPtr->GetData(), HdrData.GetData(), DataPtr->Num());
+    }
+    else if (PixelFormat == PF_R16F)
+    {
+        // Single channel 16-bit float
+        DataPtr->SetNumUninitialized(TotalVoxels * sizeof(FFloat16));
+        FFloat16* Dest = reinterpret_cast<FFloat16*>(DataPtr->GetData());
+        for (int32 i = 0; i < TotalVoxels; i++)
+        {
+            Dest[i] = FFloat16(DensityData[i]);
+        }
+    }
+    else if (PixelFormat == PF_B8G8R8A8)
+    {
+        // BGRA 8-bit - write grayscale to all channels
+        DataPtr->SetNumUninitialized(TotalVoxels * 4);
+        uint8* Dest = DataPtr->GetData();
+        for (int32 i = 0; i < TotalVoxels; i++)
+        {
+            const uint8 Val = static_cast<uint8>(FMath::Clamp(DensityData[i] * 255.f, 0.f, 255.f));
+            Dest[i * 4 + 0] = Val; // B
+            Dest[i * 4 + 1] = Val; // G
+            Dest[i * 4 + 2] = Val; // R
+            Dest[i * 4 + 3] = 255; // A
+        }
+    }
+    else if (PixelFormat == PF_FloatRGBA)
+    {
+        // RGBA 16-bit float - write grayscale to all channels
+        DataPtr->SetNumUninitialized(TotalVoxels * sizeof(FFloat16) * 4);
+        FFloat16* Dest = reinterpret_cast<FFloat16*>(DataPtr->GetData());
+        for (int32 i = 0; i < TotalVoxels; i++)
+        {
+            const FFloat16 Val(DensityData[i]);
+            Dest[i * 4 + 0] = Val; // R
+            Dest[i * 4 + 1] = Val; // G
+            Dest[i * 4 + 2] = Val; // B
+            Dest[i * 4 + 3] = FFloat16(1.0f); // A
+        }
     }
     else
     {
-        // LDR format - use FColor (BGRA8)
-        TArray<FColor> LdrData;
-        LdrData.SetNum(VoxelData.Num());
-        for (int32 i = 0; i < VoxelData.Num(); i++)
-        {
-            LdrData[i] = VoxelData[i].ToFColor(false);
-        }
-        
-        DataPtr = MakeShared<TArray<uint8>>();
-        DataPtr->SetNumUninitialized(LdrData.Num() * sizeof(FColor));
-        FMemory::Memcpy(DataPtr->GetData(), LdrData.GetData(), DataPtr->Num());
+        UE_LOG(LogTemp, Error, TEXT("VolumeTextureBaker: Unsupported pixel format!"));
+        return;
     }
     
-    // Get the texture RHI resource reference while on game thread
+    // Get the texture
     UTextureRenderTargetVolume* RT = VolumeTexture;
     if (!RT) return;
     
     // Make sure the resource is initialized
     RT->UpdateResourceImmediate(true);
     
-    // Enqueue render command directly (we're already on game thread from Then_GameThread)
+    // Enqueue render command
     ENQUEUE_RENDER_COMMAND(UpdateVolumeTexture)(
-        [RT, DataPtr, SizeX, SizeY, SizeZ, BytesPerPixel](FRHICommandListImmediate& RHICmdList)
+        [RT, DataPtr, Size, BytesPerPixel](FRHICommandListImmediate& RHICmdList)
     {
         if (!RT || !IsValid(RT)) return;
         
@@ -363,11 +366,11 @@ void UVolumeTextureBaker::WriteToVolumeRT(const TArray<FLinearColor>& VoxelData)
         FRHITexture* Texture = Resource->GetRenderTargetTexture();
         if (!Texture) return;
         
-        const uint32 SourcePitch = SizeX * BytesPerPixel;
-        const uint32 SourceDepthPitch = SourcePitch * SizeY;
+        const uint32 SourcePitch = Size * BytesPerPixel;
+        const uint32 SourceDepthPitch = SourcePitch * Size;
         
         // Update entire volume at once
-        FUpdateTextureRegion3D Region(0, 0, 0, 0, 0, 0, SizeX, SizeY, SizeZ);
+        FUpdateTextureRegion3D Region(0, 0, 0, 0, 0, 0, Size, Size, Size);
         
         PRAGMA_DISABLE_DEPRECATION_WARNINGS
         RHIUpdateTexture3D(

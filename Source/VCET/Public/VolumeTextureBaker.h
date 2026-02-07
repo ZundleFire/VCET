@@ -14,14 +14,32 @@ class UVoxelMetadata;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnVolumeTextureBaked);
 
+/** Volume texture format for output */
+UENUM(BlueprintType)
+enum class EVolumeTextureFormat : uint8
+{
+    /** Single channel 8-bit (R8) - Best for cloud density */
+    Grayscale8 UMETA(DisplayName = "Grayscale 8-bit (R8)"),
+    
+    /** Single channel 16-bit float (R16F) - HDR density */
+    Grayscale16F UMETA(DisplayName = "Grayscale 16-bit Float (R16F)"),
+    
+    /** Full color 8-bit (RGBA8) */
+    Color8 UMETA(DisplayName = "Color 8-bit (RGBA8)"),
+    
+    /** Full color 16-bit float (RGBA16F) - HDR color */
+    Color16F UMETA(DisplayName = "Color 16-bit Float (RGBA16F)")
+};
+
 /**
- * Bakes Voxel VOLUME layer data to 3D Volume Render Targets.
+ * Bakes Voxel VOLUME layer data to 3D Volume Textures.
  * Creates true volumetric textures for advanced effects like:
- * - Volumetric clouds with ray marching
+ * - Volumetric clouds with ray marching (use Grayscale format)
  * - 3D fog/mist volumes
  * - Density fields for particle effects
  * 
- * Supports both Box (AABB) and Spherical Shell sampling regions.
+ * The output is a seamless 3D cube texture, similar to UE5's built-in
+ * volumetric cloud textures.
  */
 UCLASS(ClassGroup=(VCET), meta=(BlueprintSpawnableComponent), DisplayName="VCET Volume Texture Baker")
 class VCET_API UVolumeTextureBaker : public UActorComponent
@@ -38,42 +56,23 @@ public:
     FVoxelStackVolumeLayer VolumeLayer;
     
     /** 
-     * Metadata to sample. Auto-detects type:
-     * - Float ? R channel only (density)
-     * - Linear Color ? RGBA channels
+     * Metadata to sample (optional).
+     * - Float Metadata ? density value
+     * - Linear Color Metadata ? RGBA (requires Color format)
+     * - None ? samples distance field directly
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voxel")
     TObjectPtr<UVoxelMetadata> Metadata;
 
     // === Volume Region ===
     
-    /** Use spherical shell instead of box region */
+    /** Center of the sampling region (world space) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region")
-    bool bUseSphericalRegion = false;
+    FVector VolumeCenter = FVector::ZeroVector;
     
-    // --- Box Region ---
-    
-    /** Center of the box sampling region (world space) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region|Box", meta = (EditCondition = "!bUseSphericalRegion"))
-    FVector BoxCenter = FVector::ZeroVector;
-    
-    /** Size of the box sampling region (world units) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region|Box", meta = (EditCondition = "!bUseSphericalRegion"))
-    FVector BoxExtent = FVector(100000.0f, 100000.0f, 20000.0f);
-    
-    // --- Spherical Shell Region ---
-    
-    /** Center of the sphere (typically planet center) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region|Spherical", meta = (EditCondition = "bUseSphericalRegion"))
-    FVector SphereCenter = FVector::ZeroVector;
-    
-    /** Inner radius of the shell (e.g., planet surface) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region|Spherical", meta = (EditCondition = "bUseSphericalRegion"))
-    float InnerRadius = 637100.0f;
-    
-    /** Outer radius of the shell (e.g., atmosphere top) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region|Spherical", meta = (EditCondition = "bUseSphericalRegion"))
-    float OuterRadius = 650000.0f;
+    /** Size of the sampling region - this will be mapped to the 3D texture cube */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Region")
+    FVector VolumeSize = FVector(50000.0f, 50000.0f, 50000.0f);
 
     // === Volume Texture Settings ===
     
@@ -81,21 +80,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture")
     TObjectPtr<UTextureRenderTargetVolume> VolumeRenderTarget;
     
-    /** Volume texture resolution X (width) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture", meta = (ClampMin = "4", ClampMax = "512"))
-    int32 VolumeResolutionX = 128;
+    /** 
+     * Volume texture resolution (cubic). 
+     * Common values: 32, 64, 128, 256
+     * UE5 cloud textures typically use 128.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture", meta = (ClampMin = "4", ClampMax = "256"))
+    int32 VolumeResolution = 128;
     
-    /** Volume texture resolution Y (height) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture", meta = (ClampMin = "4", ClampMax = "512"))
-    int32 VolumeResolutionY = 128;
-    
-    /** Volume texture resolution Z (depth) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture", meta = (ClampMin = "4", ClampMax = "512"))
-    int32 VolumeResolutionZ = 64;
-    
-    /** Use HDR format (RGBA16f) instead of RGBA8 */
+    /** 
+     * Texture format. Use Grayscale for cloud density (like UE5 clouds).
+     * Grayscale8 is most memory-efficient.
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture")
-    bool bUseHDR = false;
+    EVolumeTextureFormat TextureFormat = EVolumeTextureFormat::Grayscale8;
 
     // === Processing ===
     
@@ -155,7 +153,9 @@ protected:
 private:
     bool bIsBaking = false;
     
+    
+    EPixelFormat GetPixelFormat() const;
     void CreateVolumeRT();
     void BakeVolume();
-    void WriteToVolumeRT(const TArray<FLinearColor>& VoxelData);
+    void WriteToVolumeRT(const TArray<float>& DensityData);
 };
