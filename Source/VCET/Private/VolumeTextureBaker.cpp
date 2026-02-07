@@ -308,16 +308,41 @@ void UVolumeTextureBaker::WriteToVolumeRT(const TArray<FLinearColor>& VoxelData)
     const int32 SizeY = VolumeResolutionY;
     const int32 SizeZ = VolumeResolutionZ;
     
-    // Convert to appropriate pixel format
-    TArray<FColor> PixelData;
-    PixelData.SetNum(VoxelData.Num());
-    for (int32 i = 0; i < VoxelData.Num(); i++)
-    {
-        PixelData[i] = VoxelData[i].ToFColor(false);
-    }
+    // Get the texture's pixel format to determine bytes per pixel
+    const EPixelFormat PixelFormat = VolumeTexture->GetFormat();
+    const int32 BytesPerPixel = GPixelFormats[PixelFormat].BlockBytes;
     
-    // Store in shared pointer for render thread access
-    auto DataPtr = MakeShared<TArray<FColor>>(MoveTemp(PixelData));
+    // Convert to appropriate pixel format based on texture format
+    TSharedPtr<TArray<uint8>> DataPtr;
+    
+    if (PixelFormat == PF_FloatRGBA || PixelFormat == PF_A32B32G32R32F)
+    {
+        // HDR format - use FFloat16Color or full float
+        TArray<FFloat16Color> HdrData;
+        HdrData.SetNum(VoxelData.Num());
+        for (int32 i = 0; i < VoxelData.Num(); i++)
+        {
+            HdrData[i] = FFloat16Color(VoxelData[i]);
+        }
+        
+        DataPtr = MakeShared<TArray<uint8>>();
+        DataPtr->SetNumUninitialized(HdrData.Num() * sizeof(FFloat16Color));
+        FMemory::Memcpy(DataPtr->GetData(), HdrData.GetData(), DataPtr->Num());
+    }
+    else
+    {
+        // LDR format - use FColor (BGRA8)
+        TArray<FColor> LdrData;
+        LdrData.SetNum(VoxelData.Num());
+        for (int32 i = 0; i < VoxelData.Num(); i++)
+        {
+            LdrData[i] = VoxelData[i].ToFColor(false);
+        }
+        
+        DataPtr = MakeShared<TArray<uint8>>();
+        DataPtr->SetNumUninitialized(LdrData.Num() * sizeof(FColor));
+        FMemory::Memcpy(DataPtr->GetData(), LdrData.GetData(), DataPtr->Num());
+    }
     
     // Get the texture RHI resource reference while on game thread
     UTextureRenderTargetVolume* RT = VolumeTexture;
@@ -328,7 +353,7 @@ void UVolumeTextureBaker::WriteToVolumeRT(const TArray<FLinearColor>& VoxelData)
     
     // Enqueue render command directly (we're already on game thread from Then_GameThread)
     ENQUEUE_RENDER_COMMAND(UpdateVolumeTexture)(
-        [RT, DataPtr, SizeX, SizeY, SizeZ](FRHICommandListImmediate& RHICmdList)
+        [RT, DataPtr, SizeX, SizeY, SizeZ, BytesPerPixel](FRHICommandListImmediate& RHICmdList)
     {
         if (!RT || !IsValid(RT)) return;
         
@@ -338,23 +363,21 @@ void UVolumeTextureBaker::WriteToVolumeRT(const TArray<FLinearColor>& VoxelData)
         FRHITexture* Texture = Resource->GetRenderTargetTexture();
         if (!Texture) return;
         
-        const uint32 SourcePitch = SizeX * sizeof(FColor);
+        const uint32 SourcePitch = SizeX * BytesPerPixel;
+        const uint32 SourceDepthPitch = SourcePitch * SizeY;
         
-        for (int32 Z = 0; Z < SizeZ; Z++)
-        {
-            FUpdateTextureRegion3D Region(0, 0, Z, 0, 0, Z, SizeX, SizeY, 1);
-            const uint8* SourceData = reinterpret_cast<const uint8*>(DataPtr->GetData() + Z * SizeX * SizeY);
-            
-            PRAGMA_DISABLE_DEPRECATION_WARNINGS
-            RHIUpdateTexture3D(
-                Texture,
-                0, // Mip index
-                Region,
-                SourcePitch,
-                SourcePitch * SizeY,
-                SourceData
-            );
-            PRAGMA_ENABLE_DEPRECATION_WARNINGS
-        }
+        // Update entire volume at once
+        FUpdateTextureRegion3D Region(0, 0, 0, 0, 0, 0, SizeX, SizeY, SizeZ);
+        
+        PRAGMA_DISABLE_DEPRECATION_WARNINGS
+        RHIUpdateTexture3D(
+            Texture,
+            0, // Mip index
+            Region,
+            SourcePitch,
+            SourceDepthPitch,
+            DataPtr->GetData()
+        );
+        PRAGMA_ENABLE_DEPRECATION_WARNINGS
     });
 }
