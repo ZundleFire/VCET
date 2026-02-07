@@ -16,6 +16,13 @@ Bakes Voxel volume layer data to flat render targets for **non-spherical/flat wo
 - Auto-detects metadata type (Float, LinearColor, Normal)
 - Multiple layers (Primary, Secondary)
 
+### Volume Texture Baker (3D)
+Bakes Voxel volume layer data to **3D Volume Render Targets** for advanced volumetric effects.
+- True 3D volumetric textures for ray-marched clouds
+- Box region or Spherical Shell sampling modes
+- Configurable resolution (up to 512³)
+- Perfect for volumetric clouds, fog, and density fields
+
 ## Requirements
 - Unreal Engine 5.7+
 - [Voxel Plugin 2.0p8+](https://voxelplugin.com/)
@@ -105,6 +112,36 @@ Use for flat/non-spherical worlds with top-down projection.
 - `ForceRebakePrimary()` - Bake primary layer only
 - `ForceRebakeSecondary()` - Bake secondary layer only
 - `RequestGlobalRebake()` - Trigger all bakers in the world
+
+### Volume Texture Baker (3D)
+Create true 3D volumetric textures for advanced effects like ray-marched clouds.
+
+1. Add the **VCET Volume Texture Baker** component to an actor
+2. Configure `VolumeLayer` to your Voxel volume layer
+3. Choose region type:
+   - **Box Mode**: Set `BoxCenter` and `BoxExtent` for a rectangular region
+   - **Spherical Mode**: Enable `bUseSphericalRegion`, set `SphereCenter`, `InnerRadius`, `OuterRadius`
+4. Set resolution (`VolumeResolutionX/Y/Z`) - default 128x128x64
+5. Assign `Metadata` for density/color data
+6. Call `ForceRebake()` to bake, or enable `bBakeOnBeginPlay`
+
+**Blueprint Functions:**
+- `ForceRebake()` - Bake the volume texture
+- `GetVolumeTexture()` - Get the output volume texture
+- `RequestGlobalRebake()` - Trigger all volume bakers in the world
+
+**Volume Region Modes:**
+
+| Mode | Use Case | Parameters |
+|------|----------|------------|
+| **Box** | Flat worlds, local fog volumes | `BoxCenter`, `BoxExtent` |
+| **Spherical Shell** | Planetary atmospheres, cloud layers | `SphereCenter`, `InnerRadius`, `OuterRadius` |
+
+**Performance Notes:**
+- 128³ = ~2M voxels, ~8MB texture
+- 256³ = ~16M voxels, ~64MB texture
+- 512³ = ~134M voxels, ~512MB texture
+- Bake time scales linearly with voxel count
 
 ## License
 MIT License - See LICENSE file
