@@ -350,37 +350,54 @@ void UVolumeTextureBaker::WriteToVolumeRT(const TArray<float>& DensityData)
     // Get the texture
     UTextureRenderTargetVolume* RT = VolumeTexture;
     if (!RT) return;
-    
+
     // Make sure the resource is initialized
     RT->UpdateResourceImmediate(true);
+
+    // Log upload parameters for debugging
+    UE_LOG(LogTemp, Verbose, TEXT("VolumeTextureBaker: Format=%d BytesPerPixel=%d Size=%dx%dx%d TotalBytes=%d"),
+        (int)PixelFormat, BytesPerPixel, Size, Size, Size, DataPtr->Num());
+
+    // For single-slice uploads to avoid pitch issues, we'll upload one XY slice at a time
+    const uint32 SliceSize = Size * Size * BytesPerPixel;
     
     // Enqueue render command
-    ENQUEUE_RENDER_COMMAND(UpdateVolumeTexture)(
-        [RT, DataPtr, Size, BytesPerPixel](FRHICommandListImmediate& RHICmdList)
+    ENQUEUE_RENDER_COMMAND(UpdateVolumeTextureSliced)(
+        [RT, DataPtr, Size, BytesPerPixel, SliceSize](FRHICommandListImmediate& RHICmdList)
     {
         if (!RT || !IsValid(RT)) return;
-        
+
         FTextureRenderTargetResource* Resource = RT->GetRenderTargetResource();
         if (!Resource) return;
-        
+
         FRHITexture* Texture = Resource->GetRenderTargetTexture();
         if (!Texture) return;
-        
-        const uint32 SourcePitch = Size * BytesPerPixel;
-        const uint32 SourceDepthPitch = SourcePitch * Size;
-        
-        // Update entire volume at once
-        FUpdateTextureRegion3D Region(0, 0, 0, 0, 0, 0, Size, Size, Size);
-        
-        PRAGMA_DISABLE_DEPRECATION_WARNINGS
-        RHIUpdateTexture3D(
-            Texture,
-            0, // Mip index
-            Region,
-            SourcePitch,
-            SourceDepthPitch,
-            DataPtr->GetData()
-        );
-        PRAGMA_ENABLE_DEPRECATION_WARNINGS
+
+        const uint32 RowPitch = Size * BytesPerPixel;
+        const uint32 SlicePitch = RowPitch * Size;
+
+        // Upload one Z-slice at a time with a 1-deep region to avoid pitch mismatches
+        for (int32 Z = 0; Z < Size; ++Z)
+        {
+            const uint8* SliceData = DataPtr->GetData() + Z * SlicePitch;
+            
+            // Region for a single Z slice
+            FUpdateTextureRegion3D Region(
+                0, 0, Z,        // DestX, DestY, DestZ
+                0, 0, 0,        // SourceX, SourceY, SourceZ
+                Size, Size, 1   // Width, Height, Depth (1 slice)
+            );
+
+            PRAGMA_DISABLE_DEPRECATION_WARNINGS
+            RHIUpdateTexture3D(
+                Texture,
+                0,              // Mip index
+                Region,
+                RowPitch,       // Source row pitch
+                SlicePitch,     // Source depth pitch (for 1 slice this is row*height)
+                SliceData
+            );
+            PRAGMA_ENABLE_DEPRECATION_WARNINGS
+        }
     });
 }
