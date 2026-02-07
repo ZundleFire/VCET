@@ -318,45 +318,43 @@ void UVolumeTextureBaker::WriteToVolumeRT(const TArray<FLinearColor>& VoxelData)
     
     // Store in shared pointer for render thread access
     auto DataPtr = MakeShared<TArray<FColor>>(MoveTemp(PixelData));
-    TWeakObjectPtr<UTextureRenderTargetVolume> WeakRT = VolumeTexture;
     
-    // Update the volume texture on game thread, then enqueue render command
-    AsyncTask(ENamedThreads::GameThread, [WeakRT, DataPtr, SizeX, SizeY, SizeZ]()
+    // Get the texture RHI resource reference while on game thread
+    UTextureRenderTargetVolume* RT = VolumeTexture;
+    if (!RT) return;
+    
+    // Make sure the resource is initialized
+    RT->UpdateResourceImmediate(true);
+    
+    // Enqueue render command directly (we're already on game thread from Then_GameThread)
+    ENQUEUE_RENDER_COMMAND(UpdateVolumeTexture)(
+        [RT, DataPtr, SizeX, SizeY, SizeZ](FRHICommandListImmediate& RHICmdList)
     {
-        UTextureRenderTargetVolume* RT = WeakRT.Get();
         if (!RT || !IsValid(RT)) return;
         
-        RT->UpdateResourceImmediate(true);
-        
         FTextureRenderTargetResource* Resource = RT->GetRenderTargetResource();
+        if (!Resource) return;
         
-        if (Resource)
+        FRHITexture* Texture = Resource->GetRenderTargetTexture();
+        if (!Texture) return;
+        
+        const uint32 SourcePitch = SizeX * sizeof(FColor);
+        
+        for (int32 Z = 0; Z < SizeZ; Z++)
         {
-            ENQUEUE_RENDER_COMMAND(UpdateVolumeTexture)(
-                [Resource, DataPtr, SizeX, SizeY, SizeZ](FRHICommandListImmediate& RHICmdList)
-            {
-                FRHITexture* Texture = Resource->GetRenderTargetTexture();
-                if (!Texture) return;
-                
-                const uint32 SourcePitch = SizeX * sizeof(FColor);
-                
-                for (int32 Z = 0; Z < SizeZ; Z++)
-                {
-                    FUpdateTextureRegion3D Region(0, 0, Z, 0, 0, Z, SizeX, SizeY, 1);
-                    const uint8* SourceData = reinterpret_cast<const uint8*>(DataPtr->GetData() + Z * SizeX * SizeY);
-                    
-                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
-                    RHIUpdateTexture3D(
-                        Texture,
-                        0, // Mip index
-                        Region,
-                        SourcePitch,
-                        SourcePitch * SizeY,
-                        SourceData
-                    );
-                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
-                }
-            });
+            FUpdateTextureRegion3D Region(0, 0, Z, 0, 0, Z, SizeX, SizeY, 1);
+            const uint8* SourceData = reinterpret_cast<const uint8*>(DataPtr->GetData() + Z * SizeX * SizeY);
+            
+            PRAGMA_DISABLE_DEPRECATION_WARNINGS
+            RHIUpdateTexture3D(
+                Texture,
+                0, // Mip index
+                Region,
+                SourcePitch,
+                SourcePitch * SizeY,
+                SourceData
+            );
+            PRAGMA_ENABLE_DEPRECATION_WARNINGS
         }
     });
 }
