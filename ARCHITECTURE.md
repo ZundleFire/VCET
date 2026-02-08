@@ -23,7 +23,7 @@ VCET provides texture baking components that sample Voxel Plugin volume layers a
 
 **Baking Flow:**
 ```
-1. Generate spherical position buffer (lat/long ? 3D positions)
+1. Generate spherical position buffer (lat/long 3D positions)
 2. Detect metadata type (Float/LinearColor/Normal)
 3. Create appropriate metadata refs
 4. Async: Query voxel layer with positions
@@ -62,18 +62,18 @@ Pos = (Lerp(MinX, MaxX, U), Lerp(MinY, MaxY, V), SampleHeight)
 
 ```
 User Component (GameThread)
-    ?
+    
 Generate Position Buffer
-    ?
+    
 Voxel Async Task (Worker Thread)
-    ??? Query Volume Layer
-    ??? Sample Metadata
-    ??? Process Values
-    ?
+    - Query Volume Layer
+    - Sample Metadata
+    - Process Values
+    
 Return to GameThread
-    ?
+    
 Write to RenderTarget (RHI Thread)
-    ?
+    
 Broadcast Completion
 ```
 
@@ -159,11 +159,11 @@ VCET/Source/VCET/  (Runtime module)
 ```
 
 **When to keep features in the main VCET module:**
-- ? New baker types (they share common patterns)
-- ? New metadata support (minimal code)
-- ? Utilities that complement existing features
-- ? Performance optimizations
-- ? Bug fixes
+- New baker types (they share common patterns)
+- New metadata support (minimal code)
+- Utilities that complement existing features
+- Performance optimizations
+- Bug fixes
 
 **When to create a separate module:**
 
@@ -178,19 +178,19 @@ VCET/Source/VCET/  (Runtime module)
 **Multi-Module Example:**
 ```
 VCET/
-??? Source/
-?   ??? VCET/              # Core: Texture bakers (always loaded)
-?   ??? VCETMaterials/     # Material functions and shaders
-?   ??? VCETEditor/        # Editor-only tools
-?   ??? VCETAdvanced/      # Advanced features with extra deps
-??? VCET.uplugin           # Declares all modules
+    Source/
+        VCET/              # Core: Texture bakers (always loaded)
+        VCETMaterials/     # Material functions and shaders
+        VCETEditor/        # Editor-only tools
+        VCETAdvanced/      # Advanced features with extra deps
+    VCET.uplugin           # Declares all modules
 ```
 
 **Benefits of Single Module (Current):**
-- ? Simpler for contributors
-- ? Faster compile times (one module to build)
-- ? Easier dependency management
-- ? Less configuration
+- Simpler for contributors
+- Faster compile times (one module to build)
+- Easier dependency management
+- Less configuration
 
 **When Multi-Module Makes Sense:**
 - New feature adds 5+ MB of dependencies
