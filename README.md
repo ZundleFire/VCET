@@ -20,7 +20,7 @@ Bakes Voxel volume layer data to flat render targets for **non-spherical/flat wo
 Bakes Voxel volume layer data to **3D Volume Render Targets** for advanced volumetric effects.
 - True 3D volumetric textures for ray-marched clouds
 - Box region or Spherical Shell sampling modes
-- Configurable resolution (up to 512³)
+- Configurable resolution (up to 512Â³)
 - Perfect for volumetric clouds, fog, and density fields
 
 ## Requirements
@@ -138,9 +138,9 @@ Create true 3D volumetric textures for advanced effects like ray-marched clouds.
 | **Spherical Shell** | Planetary atmospheres, cloud layers | `SphereCenter`, `InnerRadius`, `OuterRadius` |
 
 **Performance Notes:**
-- 128³ = ~2M voxels, ~8MB texture
-- 256³ = ~16M voxels, ~64MB texture
-- 512³ = ~134M voxels, ~512MB texture
+- 128Â³ = ~2M voxels, ~8MB texture
+- 256Â³ = ~16M voxels, ~64MB texture
+- 512Â³ = ~134M voxels, ~512MB texture
 - Bake time scales linearly with voxel count
 
 ## License
@@ -151,10 +151,10 @@ MIT License - See LICENSE file
 We welcome community contributions! VCET is designed to be extensible and community-driven.
 
 **Ways to Contribute:**
-- ?? Report bugs via [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
-- ? Suggest features via [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
-- ?? Improve documentation
-- ?? Submit pull requests
+- Report bugs via [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
+- Suggest features via [GitHub Issues](https://github.com/ZundleFire/VCET/issues)
+- Improve documentation
+- Submit pull requests
 
 **Getting Started:**
 - Read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
