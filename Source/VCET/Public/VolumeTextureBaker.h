@@ -14,32 +14,27 @@ class UVoxelMetadata;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnVolumeTextureBaked);
 
-/** Volume texture format for output */
-UENUM(BlueprintType)
-enum class EVolumeTextureFormat : uint8
-{
-    /** Single channel 8-bit (R8) - Best for cloud density */
-    Grayscale8 UMETA(DisplayName = "Grayscale 8-bit (R8)"),
-    
-    /** Single channel 16-bit float (R16F) - HDR density */
-    Grayscale16F UMETA(DisplayName = "Grayscale 16-bit Float (R16F)"),
-    
-    /** Full color 8-bit (RGBA8) */
-    Color8 UMETA(DisplayName = "Color 8-bit (RGBA8)"),
-    
-    /** Full color 16-bit float (RGBA16F) - HDR color */
-    Color16F UMETA(DisplayName = "Color 16-bit Float (RGBA16F)")
-};
-
 /**
- * Bakes Voxel VOLUME layer data to 3D Volume Textures.
- * Creates true volumetric textures for advanced effects like:
- * - Volumetric clouds with ray marching (use Grayscale format)
+ * Bakes Voxel VOLUME layer data to 3D Volume Textures for volumetric rendering.
+ * 
+ * Creates true volumetric textures (UTextureRenderTargetVolume) suitable for:
+ * - Volumetric clouds with ray marching
  * - 3D fog/mist volumes
  * - Density fields for particle effects
+ * - Volumetric lighting and atmospherics
  * 
- * The output is a seamless 3D cube texture, similar to UE5's built-in
- * volumetric cloud textures.
+ * TECHNICAL NOTES:
+ * - Output format: Always PF_FloatRGBA (RGBA 16-bit float, 8 bytes per voxel)
+ *   This is a limitation of UE5's UTextureRenderTargetVolume which ignores format parameters
+ * - Memory usage: Resolution^3 * 8 bytes (e.g., 128³ = 16MB)
+ * - The output is a seamless 3D cube texture, similar to UE5's built-in volumetric cloud textures
+ * 
+ * WORKFLOW:
+ * 1. Set VolumeLayer to your voxel volume layer (distance field or metadata)
+ * 2. Position VolumeCenter and VolumeSize to define sampling region
+ * 3. Set VolumeResolution (32-256, typically 128 for clouds)
+ * 4. Call ForceRebake() or enable bBakeOnBeginPlay
+ * 5. Use the output VolumeTexture in your materials (Material Parameter Collection recommended)
  */
 UCLASS(ClassGroup=(VCET), meta=(BlueprintSpawnableComponent), DisplayName="VCET Volume Texture Baker")
 class VCET_API UVolumeTextureBaker : public UActorComponent
@@ -55,11 +50,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voxel")
     FVoxelStackVolumeLayer VolumeLayer;
     
+    
     /** 
      * Metadata to sample (optional).
-     * - Float Metadata ? density value
-     * - Linear Color Metadata ? RGBA (requires Color format)
-     * - None ? samples distance field directly
+     * - Float Metadata ? grayscale density (written to RGB channels)
+     * - LinearColor Metadata ? full RGBA color data
+     * - None ? samples distance field directly (grayscale)
+     * 
+     * Automatically detects metadata type and formats data appropriately.
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voxel")
     TObjectPtr<UVoxelMetadata> Metadata;
@@ -81,19 +79,13 @@ public:
     TObjectPtr<UTextureRenderTargetVolume> VolumeRenderTarget;
     
     /** 
-     * Volume texture resolution (cubic). 
+     * Volume texture resolution (cubic grid: N×N×N voxels).
      * Common values: 32, 64, 128, 256
      * UE5 cloud textures typically use 128.
+     * Memory usage: N³ × 8 bytes (e.g., 128³ = 16MB)
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture", meta = (ClampMin = "4", ClampMax = "256"))
     int32 VolumeResolution = 128;
-    
-    /** 
-     * Texture format. Use Grayscale for cloud density (like UE5 clouds).
-     * Grayscale8 is most memory-efficient.
-     */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Volume Texture")
-    EVolumeTextureFormat TextureFormat = EVolumeTextureFormat::Grayscale8;
 
     // === Processing ===
     
@@ -118,12 +110,40 @@ public:
     /** Bake on BeginPlay */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle")
     bool bBakeOnBeginPlay = false;
+    
+    // === Asset Creation ===
+    
+    /** 
+     * Automatically create a static UVolumeTexture asset after baking completes.
+     * The asset will be saved to disk and can be used independently of this component.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Asset Creation")
+    bool bCreateStaticAsset = false;
+    
+    /** 
+     * Package path where the static texture asset will be saved.
+     * Example: "/Game/Textures/Volumes" will save to Content/Textures/Volumes/
+     * Leave empty to use "/Game/VCET/Volumes"
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Asset Creation", meta = (EditCondition = "bCreateStaticAsset"))
+    FString AssetOutputPath = TEXT("/Game/VCET/Volumes");
+    
+    /** 
+     * Base name for the created asset.
+     * Will automatically append numbers to avoid overwrites (e.g., "CloudVolume_001", "CloudVolume_002")
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Asset Creation", meta = (EditCondition = "bCreateStaticAsset"))
+    FString AssetBaseName = TEXT("VolumeTexture");
 
     // === Output ===
     
-    /** The baked volume texture (read-only) */
+    /** The baked volume texture render target (read-only) */
     UPROPERTY(BlueprintReadOnly, Category = "Output")
     TObjectPtr<UTextureRenderTargetVolume> VolumeTexture;
+    
+    /** The last created static volume texture asset (if bCreateStaticAsset is enabled) */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    TObjectPtr<UVolumeTexture> StaticVolumeTexture;
     
     /** Called when baking completes */
     UPROPERTY(BlueprintAssignable, Category = "Events")
@@ -135,13 +155,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "VCET|Volume Texture")
     void ForceRebake();
     
-    /** Get the output volume texture */
+    /** Get the output volume render target */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "VCET|Volume Texture")
     UTextureRenderTargetVolume* GetVolumeTexture() const { return VolumeTexture; }
+    
+    /** Get the last created static volume texture asset */
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "VCET|Volume Texture")
+    UVolumeTexture* GetStaticVolumeTexture() const { return StaticVolumeTexture; }
     
     /** Check if currently baking */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "VCET|Volume Texture")
     bool IsBaking() const { return bIsBaking; }
+    
+    /** Manually create a static volume texture asset from the current render target */
+    UFUNCTION(BlueprintCallable, Category = "VCET|Volume Texture")
+    UVolumeTexture* CreateStaticTexture();
     
     /** Trigger all volume texture bakers in world to rebake */
     UFUNCTION(BlueprintCallable, Category = "VCET|Volume Texture", meta = (WorldContext = "WorldContextObject"))
@@ -153,9 +181,12 @@ protected:
 private:
     bool bIsBaking = false;
     
+    // Cached color data from last bake (used for creating static textures)
+    TArray<FLinearColor> CachedColorData;
     
-    EPixelFormat GetPixelFormat() const;
     void CreateVolumeRT();
     void BakeVolume();
-    void WriteToVolumeRT(const TArray<float>& DensityData);
+    void WriteToVolumeRT(const TArray<FLinearColor>& ColorData);
+    void CreateStaticAssetIfNeeded();
+    FString GetUniqueAssetName(const FString& PackagePath, const FString& BaseName);
 };
