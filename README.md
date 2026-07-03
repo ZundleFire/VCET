@@ -29,6 +29,7 @@ Voxel Graph nodes that generate multi-octave noise from a collection of 17 styli
 - 17 selectable noise types per octave (Perlin, Simplex, Worley, Voronoi, Erosion, and more)
 - Per-octave type and strength overrides via variadic pins
 - ISPC-accelerated for fast graph evaluation
+- Note: Only tested against the Voxel Plugin dev commit [`4166272`](https://github.com/VoxelPlugin/VoxelPlugin/commit/4166272af59e1ca526de267fa1e837395fbf005c), not yet verified on 2.0p8
 
 ## Requirements
 - Unreal Engine 5.7+
