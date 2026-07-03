@@ -23,6 +23,13 @@ Bakes Voxel volume layer data to **3D Volume Render Targets** for advanced volum
 - Configurable resolution (up to 512³)
 - Perfect for volumetric clouds, fog, and density fields
 
+### Procedural Noise Nodes (2D/3D)
+Voxel Graph nodes that generate multi-octave noise from a collection of 17 stylized noise types, ported from the [Procedural Noise Collection](https://fragcoord.xyz/s/pxmcvnpc) by @lumiey (MIT).
+- `Procedural Noise 2D` and `Procedural Noise 3D` nodes for height/density generation
+- 17 selectable noise types per octave (Perlin, Simplex, Worley, Voronoi, Erosion, and more)
+- Per-octave type and strength overrides via variadic pins
+- ISPC-accelerated for fast graph evaluation
+
 ## Requirements
 - Unreal Engine 5.7+
 - [Voxel Plugin 2.0p8+](https://voxelplugin.com/)
@@ -142,6 +149,58 @@ Create true 3D volumetric textures for advanced effects like ray-marched clouds.
 - 256³ = ~16M voxels, ~64MB texture
 - 512³ = ~134M voxels, ~512MB texture
 - Bake time scales linearly with voxel count
+
+### Procedural Noise Nodes
+Add the **Procedural Noise 2D** or **Procedural Noise 3D** node to a Voxel Graph to generate stylized fractal noise directly in the graph (no baking required).
+
+1. Wire a `Position` input (2D or 3D, depending on node)
+2. Set `Amplitude` (height/density range of the largest octave) and `FeatureScale` (world-space size of the largest octave)
+3. Tune `Lacunarity` (feature scale falloff per octave) and `Gain` (amplitude falloff per octave)
+4. Set `NumOctaves` and a `Seed`
+5. Pick a `DefaultNoiseType`, or override the type/strength per-octave using the variadic `OctaveType` / `OctaveStrength` pins
+
+**Noise Types:**
+
+| Type | Description |
+|------|-------------|
+| **Perlin** | Classic gradient noise |
+| **Simplex** | Simplex gradient noise |
+| **Value** | Smoothly interpolated per-cell random values |
+| **Worley** | Inverted distance to closest feature point (cellular F1) |
+| **Voronoi** | Smoothly blended per-cell random values (uses `VoronoiSmoothness`) |
+| **Blue** | High-pass filtered white noise, one value per unit cell |
+| **HilbertBlue** | Low-discrepancy noise following a Hilbert curve, one value per unit cell |
+| **Crater** | Overlapping radial rings/shells, similar to impact craters |
+| **Gabor** | Interpolated randomly oriented sine kernels |
+| **Curl** | Magnitude of the curl/gradient of Perlin noise |
+| **Scratch** | Layered thin wavy lines/strands, similar to surface scratches (uses `ScratchSmoothness`) |
+| **Wavelet** | Rotated sine wavelets (uses `WaveletPhase` to animate) |
+| **Erosion** | Perlin noise with slope-following gullies carved in, similar to hydraulic erosion |
+| **Paper** | Fibrous multi-octave gradient length, similar to paper grain |
+| **Stone** | Gradient-warped fractal Perlin, similar to stone surfaces |
+| **Wool** | Max of absolute averaged Perlin gradients, similar to felted wool |
+| **InterleavedGradient** | Interleaved gradient noise, a fast dither-style noise |
+
+The 3D node reuses the same 17 types; noises that are inherently 2D (Voronoi, HilbertBlue, Crater, Gabor, Scratch, Wavelet, Erosion, Paper, Stone, Wool) use 3D extensions of the original algorithms.
+
+**Per-Octave Overrides:**
+- `OctaveType` (variadic) - overrides `DefaultNoiseType` for a specific octave index; leave as `Default` to fall back to the default type
+- `OctaveStrength` (variadic) - multiplies the amplitude contribution of a specific octave (default `1.0`)
+
+**Node Inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `Position` | - | 2D or 3D position to sample |
+| `Amplitude` | 10000 | Height difference of the lowest/highest point of the largest octave |
+| `FeatureScale` | 100000 | World-space size the noise takes to tile, divides position |
+| `Lacunarity` | 2.0 | Feature scale reduction factor per octave |
+| `Gain` | 0.5 | Amplitude reduction factor per octave |
+| `VoronoiSmoothness` | 1.0 | Edge smoothness of cell blending (Voronoi only) |
+| `WaveletPhase` | 0.0 | Phase offset for animating Wavelet noise |
+| `ScratchSmoothness` | 0.05 | Edge smoothness of lines/strands (Scratch only) |
+| `NumOctaves` | 10 | Number of noise layers summed together (clamped 1-255) |
+| `Seed` | - | Randomizes the output noise |
 
 ## License
 MIT License - See LICENSE file

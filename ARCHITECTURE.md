@@ -56,6 +56,44 @@ Pos = Radius * (SinLat*CosLon, SinLat*SinLon, CosLat)
 Pos = (Lerp(MinX, MaxX, U), Lerp(MinY, MaxY, V), SampleHeight)
 ```
 
+### 3. Procedural Noise Nodes (`FVoxelNode_ProceduralNoise2D` / `FVoxelNode_ProceduralNoise3D`)
+
+**Purpose**: Voxel Graph nodes that evaluate multi-octave stylized noise (Perlin, Simplex, Worley, Voronoi, Erosion, etc.) directly during graph execution, instead of sampling a baked texture.
+
+**Source Layout:**
+- `VCETProceduralNoiseNodes.h/.cpp` - `FVoxelNode` definitions, pin declarations, and the `Compute()` glue that marshals Voxel buffers to/from ISPC
+- `VCETProceduralNoiseNodesImpl.ispc` - the actual per-noise-type math, compiled by ISPC for SIMD execution
+- Noise algorithms are ports of the [Procedural Noise Collection](https://fragcoord.xyz/s/pxmcvnpc) by @lumiey (MIT)
+
+**Key Types:**
+- `EVoxelProceduralNoiseType2D` / `EVoxelProceduralNoiseType3D` - 17-entry enum of selectable noise types, plus a `Default` sentinel (200) used by per-octave overrides to mean "use the node's `DefaultNoiseType`"
+- `ispc::FProceduralOctave2D` / `FProceduralOctave3D` - POD struct passed to ISPC per octave, carrying the resolved noise type and either a constant or per-sample strength buffer
+
+**Compute Flow:**
+```
+1. GameThread/Worker: Gather all input pins (Position, Amplitude, FeatureScale,
+   Lacunarity, Gain, VoronoiSmoothness, WaveletPhase, ScratchSmoothness,
+   NumOctaves, Seed, DefaultNoiseType, variadic OctaveType[], OctaveStrength[])
+2. VOXEL_GRAPH_WAIT until all pins are resolved
+3. Clamp NumOctaves to [1, 255]
+4. Build one ispc::FProceduralOctave struct per octave:
+   - Resolve Type: per-octave override if set and != Default, else DefaultNoiseType
+   - Resolve Strength: constant scalar, or per-sample array (validated against Num)
+5. Call into ISPC (ispc::VoxelNode_ProceduralNoise2D/3D) with raw buffer pointers
+   and constant/array flags for each parameter (SIMD across all sample positions)
+6. Write the summed result to the Value output pin
+```
+
+**Adding a New Noise Type:**
+1. Add an enum entry to `EVoxelProceduralNoiseType2D`/`3D` in `VCETProceduralNoiseNodes.h` with a `ToolTip`
+2. Add a `CASE(Name)` line to both `GetISPCNoise()` overloads in `VCETProceduralNoiseNodes.cpp`
+3. Implement `ProceduralNoise2D_Name`/`ProceduralNoise3D_Name` in `VCETProceduralNoiseNodesImpl.ispc`
+4. Document the new type in `README.md`'s noise type table
+
+**Thread Safety:**
+- Pin gathering and struct setup can run on any Voxel graph worker thread
+- ISPC evaluation is pure/stateless and safe to run in parallel across queries
+
 ## Data Flow
 
 ### High-Level Pipeline
